@@ -1,5 +1,5 @@
 """
-IronCage SaaS API
+IronCage SaaS API - Render Edition
 """
 
 import os
@@ -7,17 +7,16 @@ import secrets
 import hashlib
 import hmac
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 import jwt
 
 # Config
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_hex(32))
-JWT_ALGORITHM = "HS256"
 
 # Database (in-memory)
 users_db: Dict[str, dict] = {}
@@ -62,7 +61,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_token(user_id: str, tenant_id: str = None) -> str:
     return jwt.encode(
         {"sub": user_id, "tenant_id": tenant_id, "exp": datetime.now(timezone.utc) + timedelta(hours=24)},
-        JWT_SECRET, algorithm=JWT_ALGORITHM
+        JWT_SECRET, algorithm="HS256"
     )
 
 def scan_prompt(prompt: str) -> dict:
@@ -76,7 +75,7 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     if not creds:
         raise HTTPException(401, "Not authenticated")
     try:
-        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=["HS256"])
         user = users_db.get(payload["sub"])
         if not user:
             raise HTTPException(401, "User not found")
@@ -94,15 +93,15 @@ async def get_tenant_from_key(x_api_key: str = Header(None, alias="X-API-Key")) 
         raise HTTPException(401, "Invalid API key")
     return tenants_db.get(tenant_id)
 
-# Models
+# Models (without email validation)
 class SignupReq(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(..., min_length=8)
     name: str
     company: str
 
 class LoginReq(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class ScanReq(BaseModel):
@@ -162,3 +161,4 @@ async def stats(user: dict = Depends(get_current_user)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+
